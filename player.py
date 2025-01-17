@@ -3,7 +3,7 @@ import pygame
 from sprite import Sprite
 
 class Player(Sprite):
-    def __init__(self, width, height, asset_path):
+    def __init__(self, width, height, asset_path, start_x=0, start_y=0):
         super().__init__(None, width, height)
         self.asset_path = asset_path
         self.animations = self.load_animations()
@@ -14,7 +14,8 @@ class Player(Sprite):
         self.image = self.animations[self.current_animation][0]
 
         self.facing_direction = "Down"  # Default facing direction
-        self.speed = 2
+        self.rect.topleft = (start_x, start_y)
+        self.speed = 3
         self.is_sprinting = False
 
         # Stamina-related attributes
@@ -25,6 +26,7 @@ class Player(Sprite):
         self.stamina_recharge_needed = False
 
     def load_animations(self):
+        """Load animations for each direction."""
         animations = {}
         directions = ["Down", "Up", "Left", "Right"]
         for direction in directions:
@@ -34,6 +36,7 @@ class Player(Sprite):
         return animations
 
     def load_image(self, image_path):
+        """Load an image and scale it to the player's size."""
         try:
             image = pygame.image.load(image_path)
             return pygame.transform.scale(image, (self.rect.width, self.rect.height))
@@ -41,25 +44,28 @@ class Player(Sprite):
             raise SystemExit(f"Unable to load image {image_path}: {e}")
 
     def move(self, dx, dy):
+        """Move the player by the specified deltas."""
         self.rect.x += dx
         self.rect.y += dy
 
     def idle(self):
-        self.current_frame = 0  # Nastav na prvú snímku
-        self.frame_counter = 0  # Reset časovača snímok
-        self.image = self.animations[self.current_animation][0]  # Nastav aktuálny obrázok na img1
+        """Set the player to an idle state."""
+        self.current_frame = 0  # Reset to the first frame
+        self.frame_counter = 0  # Reset frame counter
+        self.image = self.animations[self.current_animation][0]  # Set the current image to the first frame
 
     def update(self, direction):
+        """Update the player's animation based on the current direction."""
         if direction:
-            # Ak je smer pohybu zmenený, začni animáciu od začiatku
+            # If the direction has changed, reset to the first frame
             if self.current_animation != direction:
-                self.current_frame = 0  # Reset na prvú snímku
-                self.frame_counter = 0  # Reset časovača snímok
+                self.current_frame = 0
+                self.frame_counter = 0
 
-            self.facing_direction = direction  # Aktualizuj smer
+            self.facing_direction = direction
             self.current_animation = direction
 
-            # Animácia: img1 → img2 → img1 → img3 → ...
+            # Animation frames
             animation_frames = self.animations[direction]
             extended_frames = [animation_frames[0], animation_frames[1], animation_frames[0], animation_frames[2]]
 
@@ -70,7 +76,6 @@ class Player(Sprite):
 
             self.image = extended_frames[self.current_frame]
         else:
-            # Keď sa hráč zastaví, zobraz img1
             self.idle()
 
     def handle_movement(self, keys):
@@ -100,7 +105,7 @@ class Player(Sprite):
 
         # Normalize diagonal movement
         if dx != 0 and dy != 0:
-            normalization_factor = (2 ** 0.5) / 2  # Normalize diagonal movement
+            normalization_factor = (2 ** 0.5) / 2
             dx *= normalization_factor
             dy *= normalization_factor
 
@@ -123,3 +128,7 @@ class Player(Sprite):
 
         # Update animation based on direction
         self.update(direction)
+
+    def draw(self, screen, camera_x, camera_y):
+        """Draw the player adjusted for the camera position."""
+        screen.blit(self.image, (self.rect.x - camera_x, self.rect.y - camera_y))
