@@ -1,6 +1,9 @@
 import os
 import pygame
 from sprite import Sprite
+from utils import get_tile_under_player, get_tile_properties
+
+
 
 class Player(Sprite):
     def __init__(self, width, height, asset_path, start_x=0, start_y=0):
@@ -26,7 +29,6 @@ class Player(Sprite):
         self.stamina_recharge_needed = False
 
     def load_animations(self):
-        """Load animations for each direction."""
         animations = {}
         directions = ["Down", "Up", "Left", "Right"]
         for direction in directions:
@@ -36,7 +38,6 @@ class Player(Sprite):
         return animations
 
     def load_image(self, image_path):
-        """Load an image and scale it to the player's size."""
         try:
             image = pygame.image.load(image_path)
             return pygame.transform.scale(image, (self.rect.width, self.rect.height))
@@ -44,18 +45,15 @@ class Player(Sprite):
             raise SystemExit(f"Unable to load image {image_path}: {e}")
 
     def move(self, dx, dy):
-        """Move the player by the specified deltas."""
         self.rect.x += dx
         self.rect.y += dy
 
     def idle(self):
-        """Set the player to an idle state."""
         self.current_frame = 0  # Reset to the first frame
         self.frame_counter = 0  # Reset frame counter
         self.image = self.animations[self.current_animation][0]  # Set the current image to the first frame
 
     def update(self, direction):
-        """Update the player's animation based on the current direction."""
         if direction:
             # If the direction has changed, reset to the first frame
             if self.current_animation != direction:
@@ -78,14 +76,14 @@ class Player(Sprite):
         else:
             self.idle()
 
-    def handle_movement(self, keys):
+    def handle_movement(self, keys, tmx_data):
         """Handle player movement and stamina."""
         direction = None
         dx, dy = 0, 0
         speed = self.speed
+        moving = False  # Indicator to check if the player is moving
 
-        # Sprint logic
-        moving = False
+        # Handle movement based on key presses
         if keys[pygame.K_a]:
             dx = -1
             direction = "Left"
@@ -103,15 +101,37 @@ class Player(Sprite):
             direction = "Down"
             moving = True
 
-        # Normalize diagonal movement
+        # Normalize diagonal movement to prevent faster diagonal speed
         if dx != 0 and dy != 0:
             normalization_factor = (2 ** 0.5) / 2
             dx *= normalization_factor
             dy *= normalization_factor
 
+        # Calculate the player's new position
+        new_rect = self.rect.move(dx * speed, dy * speed)
+
+        # Get the tile under the player and its properties
+        tile_x, tile_y = get_tile_under_player(new_rect, tmx_data)
+        tile_properties = get_tile_properties(tile_x, tile_y, tmx_data)
+
+        # Special check for downward movement
+        if direction == "Down":
+            # Check the bottom tile (based on the bottom of the player's sprite)
+            bottom_tile_y = (new_rect.bottom - 1) // tmx_data.tileheight
+            bottom_tile_properties = get_tile_properties(tile_x, bottom_tile_y, tmx_data)
+            if not (bottom_tile_properties and "walk" in bottom_tile_properties and bottom_tile_properties[
+                "walk"] == 1):
+                # If the bottom tile is not walkable, prevent downward movement
+                dy = 0
+
+        # Allow movement only if the current tile is walkable
+        if tile_properties and "walk" in tile_properties and tile_properties["walk"] == 1:
+            self.move(dx * speed, dy * speed)
+
+        # Sprint logic
         if moving and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not self.stamina_recharge_needed:
             self.is_sprinting = True
-            speed *= 1.5
+            speed *= 1.5  # Increase speed during sprint
             self.stamina -= self.stamina_depletion_rate
             self.stamina = max(0, self.stamina)
             if self.stamina == 0:
@@ -123,12 +143,5 @@ class Player(Sprite):
             if self.stamina == self.max_stamina:
                 self.stamina_recharge_needed = False
 
-        # Move player
-        self.move(dx * speed, dy * speed)
-
-        # Update animation based on direction
+        # Update the animation based on the current direction
         self.update(direction)
-
-    def draw(self, screen, camera_x, camera_y):
-        """Draw the player adjusted for the camera position."""
-        screen.blit(self.image, (self.rect.x - camera_x, self.rect.y - camera_y))

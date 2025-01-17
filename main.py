@@ -4,6 +4,8 @@ from pytmx.util_pygame import load_pygame
 from player import Player
 from abilities import AbilitySystem
 from stats import StaminaBar, SelectedAbilityDisplay
+from utils import get_tile_under_player, get_tile_properties
+
 
 pygame.init()
 
@@ -75,7 +77,7 @@ while running:
         running = False
 
     # Handle player movement and stamina
-    player.handle_movement(keys)
+    player.handle_movement(keys, tmx_data)
 
     # Update stamina bar
     stamina_bar.update()
@@ -109,6 +111,10 @@ while running:
 
     # Draw the map (optimized rendering)
     render_map()
+
+    # Get tile under player
+    tile_x, tile_y = get_tile_under_player(player.rect, tmx_data)
+    tile_properties = get_tile_properties(tile_x, tile_y, tmx_data)
 
     # Draw player (after adjusting the camera)
     screen.blit(player.image, player.rect.move(-camera.x, -camera.y))
