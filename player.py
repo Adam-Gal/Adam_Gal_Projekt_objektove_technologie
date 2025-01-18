@@ -119,13 +119,13 @@ class Player(Sprite):
             # Check the bottom tile (based on the bottom of the player's sprite)
             bottom_tile_y = (new_rect.bottom - 1) // tmx_data.tileheight
             bottom_tile_properties = get_tile_properties(tile_x, bottom_tile_y, tmx_data)
-            if not (bottom_tile_properties and "walk" in bottom_tile_properties and bottom_tile_properties[
-                "walk"] == 1):
+            if not (bottom_tile_properties and "canWalk" in bottom_tile_properties and bottom_tile_properties[
+                "canWalk"] == 1):
                 # If the bottom tile is not walkable, prevent downward movement
                 dy = 0
 
         # Allow movement only if the current tile is walkable
-        if tile_properties and "walk" in tile_properties and tile_properties["walk"] == 1:
+        if tile_properties and "canWalk" in tile_properties and tile_properties["canWalk"] == 1:
             self.move(dx * speed, dy * speed)
 
         # Sprint logic

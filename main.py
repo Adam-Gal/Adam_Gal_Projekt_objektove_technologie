@@ -1,13 +1,16 @@
 import pygame
 import pytmx
+import time
 from pytmx.util_pygame import load_pygame
 from player import Player
 from abilities import AbilitySystem
 from stats import StaminaBar, SelectedAbilityDisplay
 from utils import get_tile_under_player, get_tile_properties
 
-
 pygame.init()
+
+# Initialize a clock to track the time for animations
+start_time = time.time()
 
 # Screen settings
 SCREEN_WIDTH = pygame.display.Info().current_w
@@ -44,8 +47,7 @@ running = True
 
 def render_map():
     """Render visible tiles of the map based on the camera position."""
-    tile_width = tmx_data.tilewidth
-    tile_height = tmx_data.tileheight
+    tile_width, tile_height = tmx_data.tilewidth, tmx_data.tileheight
 
     # Calculate visible tile range
     start_x = max(0, camera.left // tile_width)
@@ -53,24 +55,44 @@ def render_map():
     start_y = max(0, camera.top // tile_height)
     end_y = min(tmx_data.height, (camera.bottom // tile_height) + 1)
 
+    # Get elapsed time for animations (in milliseconds)
+    elapsed_time = (time.time() - start_time) * 1000
+
+    # Iterate through visible layers
     for layer in tmx_data.visible_layers:
         if isinstance(layer, pytmx.TiledTileLayer):
             for x, y, gid in layer:
-                if start_x <= x < end_x and start_y <= y < end_y:
-                    tile_surface = tmx_data.get_tile_image_by_gid(gid)
-                    if tile_surface:
-                        # Calculate tile position relative to camera
+                if start_x <= x < end_x and start_y <= y < end_y and gid != 0:
+                    # Get tile properties
+                    tile_properties = tmx_data.get_tile_properties_by_gid(gid)
+
+                    # If the tile has animation frames, handle the animation
+                    if tile_properties and "frames" in tile_properties:
+                        animation_frames = tile_properties["frames"]
+                        if animation_frames:
+                            total_duration = sum(duration for _, duration in animation_frames)
+                            current_time = elapsed_time % total_duration
+                            frame_duration_sum = 0
+
+                            # Loop through the frames and select the one to display
+                            for tileid, duration in animation_frames:
+                                frame_duration_sum += duration
+                                if current_time < frame_duration_sum:
+                                    gid = tileid
+                                    break
+
+                    # Get the tile image for the current gid
+                    tile_image = tmx_data.get_tile_image_by_gid(gid)
+                    if tile_image:
+                        # Draw tile at camera-adjusted position
                         x_pos = x * tile_width - camera.x
                         y_pos = y * tile_height - camera.y
-                        screen.blit(tile_surface, (x_pos, y_pos))
-
+                        screen.blit(tile_image, (x_pos, y_pos))
 
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-
-    screen.fill((0, 128, 255))
 
     keys = pygame.key.get_pressed()
     if keys[pygame.K_ESCAPE]:
