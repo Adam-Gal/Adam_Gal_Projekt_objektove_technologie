@@ -4,7 +4,6 @@ from sprite import Sprite
 from utils import get_tile_under_player, get_tile_properties
 
 
-
 class Player(Sprite):
     def __init__(self, width, height, asset_path, start_x=0, start_y=0):
         super().__init__(None, width, height)
@@ -16,17 +15,22 @@ class Player(Sprite):
         self.frame_counter = 0
         self.image = self.animations[self.current_animation][0]
 
-        self.facing_direction = "Down"  # Default facing direction
+        self.facing_direction = "Down"
         self.rect.topleft = (start_x, start_y)
-        self.speed = 3
+        self.speed = 2
         self.is_sprinting = False
 
-        # Stamina-related attributes
+        # Health attributes
+        self.max_health = 100
+        self.health = self.max_health
+
+        # Stamina attributes
         self.max_stamina = 100
         self.stamina = self.max_stamina
         self.stamina_regen_rate = 0.3
-        self.stamina_depletion_rate = 0.4
+        self.stamina_depletion_rate = 0.35
         self.stamina_recharge_needed = False
+
 
     def load_animations(self):
         animations = {}
@@ -80,8 +84,10 @@ class Player(Sprite):
         """Handle player movement and stamina."""
         direction = None
         dx, dy = 0, 0
-        speed = self.speed
         moving = False  # Indicator to check if the player is moving
+
+        # Base speed (adjusted for sprinting)
+        speed = self.speed
 
         # Handle movement based on key presses
         if keys[pygame.K_a]:
@@ -107,6 +113,21 @@ class Player(Sprite):
             dx *= normalization_factor
             dy *= normalization_factor
 
+        # Sprint logic
+        if moving and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not self.stamina_recharge_needed:
+            self.is_sprinting = True
+            speed *= 1.5  # Increase speed during sprint
+            self.stamina -= self.stamina_depletion_rate
+            self.stamina = max(0, self.stamina)
+            if self.stamina == 0:
+                self.stamina_recharge_needed = True
+        else:
+            self.is_sprinting = False
+            self.stamina += self.stamina_regen_rate
+            self.stamina = min(self.max_stamina, self.stamina)
+            if self.stamina == self.max_stamina:
+                self.stamina_recharge_needed = False
+
         # Calculate the player's new position
         new_rect = self.rect.move(dx * speed, dy * speed)
 
@@ -127,21 +148,6 @@ class Player(Sprite):
         # Allow movement only if the current tile is walkable
         if tile_properties and "canWalk" in tile_properties and tile_properties["canWalk"] == 1:
             self.move(dx * speed, dy * speed)
-
-        # Sprint logic
-        if moving and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not self.stamina_recharge_needed:
-            self.is_sprinting = True
-            speed *= 1.5  # Increase speed during sprint
-            self.stamina -= self.stamina_depletion_rate
-            self.stamina = max(0, self.stamina)
-            if self.stamina == 0:
-                self.stamina_recharge_needed = True
-        else:
-            self.is_sprinting = False
-            self.stamina += self.stamina_regen_rate
-            self.stamina = min(self.max_stamina, self.stamina)
-            if self.stamina == self.max_stamina:
-                self.stamina_recharge_needed = False
 
         # Update the animation based on the current direction
         self.update(direction)

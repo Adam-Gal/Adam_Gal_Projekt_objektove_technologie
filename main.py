@@ -4,8 +4,8 @@ import time
 from pytmx.util_pygame import load_pygame
 from player import Player
 from abilities import AbilitySystem
-from stats import StaminaBar, SelectedAbilityDisplay
-from utils import get_tile_under_player, get_tile_properties
+from utils import get_tile_under_player, get_tile_properties, get_spawn_position
+from stats import StaminaBar, SelectedAbilityDisplay, HealthBar
 
 pygame.init()
 
@@ -25,8 +25,16 @@ map_width = tmx_data.width * tmx_data.tilewidth
 map_height = tmx_data.height * tmx_data.tileheight
 
 # Initialize player
-player = Player(player_size, player_size, "Assets/Player", 1000, 1000)
+# Nájdite pozíciu pre spawn
+spawn_position = get_spawn_position(tmx_data, 1)
+if spawn_position:
+    spawn_x, spawn_y = spawn_position
+    player = Player(player_size, player_size, "Assets/Player", spawn_x-10, spawn_y-player_size/2)
+else:
+    player = Player(player_size, player_size, "Assets/Player", 1000, 1000)
+
 stamina_bar = StaminaBar(player)  # Create stamina bar for the player
+health_bar = HealthBar(player)
 
 # Initialize ability system
 ability_system = AbilitySystem()
@@ -71,7 +79,8 @@ def render_map():
                         animation_frames = tile_properties["frames"]
                         if animation_frames:
                             total_duration = sum(duration for _, duration in animation_frames)
-                            current_time = elapsed_time % total_duration
+                            if total_duration > 0:
+                                current_time = elapsed_time % total_duration
                             frame_duration_sum = 0
 
                             # Loop through the frames and select the one to display
@@ -94,6 +103,8 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
+    screen.fill((0, 0, 0))
+
     keys = pygame.key.get_pressed()
     if keys[pygame.K_ESCAPE]:
         running = False
@@ -103,14 +114,6 @@ while running:
 
     # Update stamina bar
     stamina_bar.update()
-
-    # Handle ability selection and triggering
-    if keys[pygame.K_q]:
-        ability_system.cycle_ability("prev")  # Cycle to the previous ability
-    if keys[pygame.K_e]:
-        ability_system.cycle_ability("next")  # Cycle to the next ability
-    if keys[pygame.K_SPACE]:
-        ability_system.trigger_ability(player.rect.centerx, player.rect.centery, player.facing_direction)
 
     # Update and draw abilities
     ability_system.update_abilities()
@@ -131,6 +134,14 @@ while running:
     camera.right = min(map_width, camera.right)
     camera.bottom = min(map_height, camera.bottom)
 
+    # Handle ability selection and triggering
+    if keys[pygame.K_q]:
+        ability_system.cycle_ability("prev")  # Cycle to the previous ability
+    if keys[pygame.K_e]:
+        ability_system.cycle_ability("next")  # Cycle to the next ability
+    if keys[pygame.K_SPACE]:
+        ability_system.trigger_ability(player.rect.x+player_size/2, player.rect.y+player_size/2, player.facing_direction)
+
     # Draw the map (optimized rendering)
     render_map()
 
@@ -142,13 +153,14 @@ while running:
     screen.blit(player.image, player.rect.move(-camera.x, -camera.y))
 
     # Draw the player's hitbox (adjusted based on camera position)
-    pygame.draw.rect(screen, (255, 0, 0), player.rect.move(-camera.x, -camera.y), 2)  # Red color with 2px border
+    #pygame.draw.rect(screen, (255, 0, 0), player.rect.move(-camera.x, -camera.y), 2)  # Red color with 2px border
 
     # Draw abilities (make sure they appear after player)
     ability_system.draw_abilities(screen, camera.x, camera.y)
 
     # Draw stamina bar
     stamina_bar.draw(screen, 20, 20, 200, 20)
+    health_bar.draw(screen, 20, 50, 200, 20)
 
     # Draw the selected ability
     selected_ability_display.draw(screen, 20, 50)

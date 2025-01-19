@@ -20,3 +20,18 @@ def get_tile_properties(tile_x, tile_y, tmx_data):
         tile_properties = tmx_data.get_tile_properties_by_gid(gid)
         return tile_properties
     return None
+
+def get_spawn_position(tmx_data, spawn_value):
+    """Nájde pozíciu dlaždice s vlastnosťou `spawn` a danou hodnotou."""
+    for layer in tmx_data.visible_layers:
+        if isinstance(layer, pytmx.TiledTileLayer):
+            for x, y, gid in layer:
+                if gid != 0:  # Ak dlaždica existuje
+                    tile_properties = tmx_data.get_tile_properties_by_gid(gid)
+                    if tile_properties and tile_properties.get("spawn") == spawn_value:
+                        tile_width = tmx_data.tilewidth
+                        tile_height = tmx_data.tileheight
+                        return x * tile_width, y * tile_height
+    return None  # Ak sa nenašla žiadna dlaždica
+
+

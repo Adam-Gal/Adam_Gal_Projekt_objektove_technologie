@@ -6,8 +6,6 @@ import os
 class Ability(pygame.sprite.Sprite):
     def __init__(self, x, y, direction):
         super().__init__()
-        self.x = x
-        self.y = y
         self.direction = direction
         self.velocity = (0, 0)  # Default value to prevent AttributeError
 
@@ -25,19 +23,19 @@ class Ability(pygame.sprite.Sprite):
     def set_velocity(self, direction, speed):
         """Sets the velocity based on the direction."""
         if direction == "Up":
-            return (0, -speed)
+            return 0, -speed
         elif direction == "Down":
-            return (0, speed)
+            return 0, speed
         elif direction == "Left":
-            return (-speed, 0)
+            return -speed, 0
         elif direction == "Right":
-            return (speed, 0)
-        return (0, 0)
+            return speed, 0
+        return 0, 0
 
 
 # Fireball ability
 class Fireball(Ability):
-    def __init__(self, x, y, direction):
+    def __init__(self, x, y, direction, max_distance=500):
         super().__init__(x, y, direction)
 
         # Load fireball images for different directions
@@ -53,10 +51,10 @@ class Fireball(Ability):
             return  # Exit if no images are found, avoiding further errors
 
         self.current_frame = 0
-        self.animation_speed = 100  # Milliseconds per frame
+        self.animation_speed = 50  # Milliseconds per frame
         self.last_animation_time = pygame.time.get_ticks()
 
-        self.speed = 10  # Movement speed of the fireball
+        self.speed = 7  # Movement speed of the fireball
         self.velocity = self.set_velocity(direction, self.speed)
 
         # Make sure to rotate images and set the initial image here
@@ -65,6 +63,35 @@ class Fireball(Ability):
 
         # Now that self.image is assigned, call adjust_hitbox
         self.rect = self.adjust_hitbox(x, y, direction)
+
+        # Add max distance and distance traveled
+        self.max_distance = max_distance
+        self.start_x = x
+        self.start_y = y
+        self.distance_traveled = 0
+
+    def update(self):
+        """Update the fireball's position and animation."""
+        # Move the fireball based on its velocity
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+
+        # Update the distance traveled
+        dx = self.rect.x - self.start_x
+        dy = self.rect.y - self.start_y
+        self.distance_traveled = (dx ** 2 + dy ** 2) ** 0.5
+
+        # Destroy the fireball if it exceeds the max distance
+        if self.distance_traveled >= self.max_distance:
+            self.kill()
+
+        # Update the animation
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_animation_time > self.animation_speed:
+            self.last_animation_time = current_time
+            self.current_frame = (self.current_frame + 1) % len(self.images)
+            self.image = self.images[self.current_frame]  # Update the fireball image
+
 
     def rotate_image(self, image, direction):
         """Rotates the image based on the direction."""
@@ -77,19 +104,6 @@ class Fireball(Ability):
         elif direction == "Down":
             return pygame.transform.rotate(image, -90)
         return image
-
-    def update(self):
-        """Update the fireball's position and animation."""
-        # Move the fireball based on its velocity
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
-
-        # Update the animation
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_animation_time > self.animation_speed:
-            self.last_animation_time = current_time
-            self.current_frame = (self.current_frame + 1) % len(self.images)
-            self.image = self.images[self.current_frame]  # Update the fireball image
 
     def draw(self, screen, show_hitboxes=False):
         """Draw the fireball on the screen."""
