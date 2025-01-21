@@ -1,3 +1,5 @@
+import time
+
 import pygame
 
 class StaminaBar:
@@ -72,3 +74,27 @@ class HealthBar:
         health_ratio = self.player.health / self.player.max_health
         bar_color = self.get_health_color()
         pygame.draw.rect(surface, bar_color, (x, y, width * health_ratio, height))
+
+class TimerDisplay:
+    def __init__(self, time_limit):
+        self.time_limit = time_limit
+        self.start_timer = None
+
+    def start(self):
+        """Spustí časovač."""
+        self.start_timer = time.time()
+
+    def reset(self):
+        """Resetuje časovač."""
+        self.start_timer = None
+
+    def draw(self, surface, font, x, y):
+        """Vykreslí zostávajúci čas na obrazovke."""
+        if self.start_timer is not None:
+            elapsed_time = time.time() - self.start_timer
+            remaining_time = max(0, self.time_limit - elapsed_time)
+            minutes = int(remaining_time // 60)
+            seconds = int(remaining_time % 60)
+            time_text = f"{minutes:02}:{seconds:02}"
+            text_surface = font.render(time_text, True, (255, 255, 255))
+            surface.blit(text_surface, (x, y))

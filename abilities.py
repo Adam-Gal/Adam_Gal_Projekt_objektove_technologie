@@ -1,153 +1,84 @@
 import pygame
 import os
+import math
 
 
-# Base class for abilities
-class Ability(pygame.sprite.Sprite):
-    def __init__(self, x, y, direction):
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction, speed, damage, max_distance=500):
         super().__init__()
+        self.image = pygame.Surface((20, 20))  # Example projectile size
+        self.image.fill((255, 0, 0))  # Fill with red color for visibility
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+
         self.direction = direction
-        self.velocity = (0, 0)  # Default value to prevent AttributeError
-
-    def update(self):
-        pass  # Can be overridden in specific ability classes
-
-    def adjust_hitbox(self, x, y, direction):
-        """Adjusts the hitbox based on the ability's direction."""
-        # Assume width and height of the image
-        width, height = 20, 20  # Default size for a generic ability
-        rect = pygame.Rect(0, 0, width, height)
-        rect.center = (x, y)
-        return rect
-
-    def set_velocity(self, direction, speed):
-        """Sets the velocity based on the direction."""
-        if direction == "Up":
-            return 0, -speed
-        elif direction == "Down":
-            return 0, speed
-        elif direction == "Left":
-            return -speed, 0
-        elif direction == "Right":
-            return speed, 0
-        return 0, 0
-
-
-# Fireball ability
-class Fireball(Ability):
-    def __init__(self, x, y, direction, max_distance=500):
-        super().__init__(x, y, direction)
-
-        # Load fireball images for different directions
-        self.image_folder = "Assets/Abilities/Fire/"
-        self.image_paths = sorted([os.path.join(self.image_folder, f) for f in os.listdir(self.image_folder) if
-                                   f.startswith("FB") and f.endswith(".png")])
-
-        # Load images and set up animation
-        self.images = [pygame.image.load(path).convert_alpha() for path in self.image_paths]
-
-        if not self.images:
-            print("Error: No images found for fireball!")
-            return  # Exit if no images are found, avoiding further errors
-
-        self.current_frame = 0
-        self.animation_speed = 50  # Milliseconds per frame
-        self.last_animation_time = pygame.time.get_ticks()
-
-        self.speed = 7  # Movement speed of the fireball
-        self.velocity = self.set_velocity(direction, self.speed)
-
-        # Make sure to rotate images and set the initial image here
-        self.images = [self.rotate_image(img, direction) for img in self.images]
-        self.image = self.images[self.current_frame]  # Set the initial image
-
-        # Now that self.image is assigned, call adjust_hitbox
-        self.rect = self.adjust_hitbox(x, y, direction)
-
-        # Add max distance and distance traveled
+        self.speed = speed
+        self.damage = damage
         self.max_distance = max_distance
-        self.start_x = x
-        self.start_y = y
+        self.start_pos = (x, y)
         self.distance_traveled = 0
 
-    def update(self):
-        """Update the fireball's position and animation."""
-        # Move the fireball based on its velocity
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
+    def update(self, player=None):
+        if player:
+            # Calculate the direction towards the player
+            dx = player.rect.centerx - self.rect.centerx
+            dy = player.rect.centery - self.rect.centery
+            self.direction = math.atan2(dy, dx)  # Update the direction towards the player
 
-        # Update the distance traveled
-        dx = self.rect.x - self.start_x
-        dy = self.rect.y - self.start_y
-        self.distance_traveled = (dx ** 2 + dy ** 2) ** 0.5
+        # Move the projectile in the calculated direction
+        self.rect.x += math.cos(self.direction) * self.speed
+        self.rect.y += math.sin(self.direction) * self.speed
 
-        # Destroy the fireball if it exceeds the max distance
+        # Update distance traveled
+        dx = self.rect.x - self.start_pos[0]
+        dy = self.rect.y - self.start_pos[1]
+        self.distance_traveled = math.sqrt(dx ** 2 + dy ** 2)
+
+        # Remove the projectile if it exceeds the maximum distance
         if self.distance_traveled >= self.max_distance:
             self.kill()
 
-        # Update the animation
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_animation_time > self.animation_speed:
-            self.last_animation_time = current_time
-            self.current_frame = (self.current_frame + 1) % len(self.images)
-            self.image = self.images[self.current_frame]  # Update the fireball image
+    def check_collision_with_npcs(self, npc_group):
+        """Check if the projectile hits any NPC."""
+        for npc in npc_group:
+            if self.rect.colliderect(npc.rect):
+                npc.health -= self.damage
+                if npc.health <= 0:
+                    npc.kill()
+                self.kill()
 
 
-    def rotate_image(self, image, direction):
-        """Rotates the image based on the direction."""
-        if direction == "Left":
-            return pygame.transform.rotate(image, 180)
-        elif direction == "Right":
-            return pygame.transform.rotate(image, 0)
-        elif direction == "Up":
-            return pygame.transform.rotate(image, 90)
-        elif direction == "Down":
-            return pygame.transform.rotate(image, -90)
-        return image
-
-    def draw(self, screen, show_hitboxes=False):
-        """Draw the fireball on the screen."""
-        screen.blit(self.image, self.rect)
-        if show_hitboxes:
-            pygame.draw.rect(screen, (255, 0, 0), self.rect, 2)
-
-
-# Ability System to manage multiple abilities
 class AbilitySystem:
     def __init__(self):
-        self.abilities = pygame.sprite.Group()  # Holds all active abilities
-        self.selected_ability = "Fireball"  # The current ability to use (can be switched)
-        self.last_ability_time = 0  # To track the time of the last ability trigger
-        self.ability_cooldown = 500  # Cooldown time between abilities in milliseconds
+        self.abilities = pygame.sprite.Group()
+        self.selected_ability = "Fireball"
+        self.last_ability_time = 0
+        self.ability_cooldown = 500
+        self.projectiles = pygame.sprite.Group()  # Keep track of projectiles
 
-    def cycle_ability(self, direction):
-        """Cycles through the available abilities."""
-        if direction == "next":
-            if self.selected_ability == "Fireball":
-                self.selected_ability = "Iceblast"  # Example, can add more abilities
-            elif self.selected_ability == "Iceblast":
-                self.selected_ability = "Fireball"
-        elif direction == "prev":
-            if self.selected_ability == "Fireball":
-                self.selected_ability = "Iceblast"
-            elif self.selected_ability == "Iceblast":
-                self.selected_ability = "Fireball"
-
-    def trigger_ability(self, x, y, direction):
-        """Trigger the selected ability at the player's position and direction, with a delay."""
+    def trigger_ability(self, x, y, direction, camera_x, camera_y):
         current_time = pygame.time.get_ticks()
         if current_time - self.last_ability_time >= self.ability_cooldown:
             if self.selected_ability == "Fireball":
-                fireball = Fireball(x, y, direction)
-                self.abilities.add(fireball)  # Add the new fireball to the abilities group
-            # You can add more abilities like Iceblast, Lightning, etc., in a similar way
-            self.last_ability_time = current_time  # Update the last ability time
+                # Adjust mouse position to world coordinates by subtracting the camera position
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                mouse_x += camera_x
+                mouse_y += camera_y
 
-    def update_abilities(self):
-        """Update all active abilities."""
-        self.abilities.update()
+                # Calculate the angle toward the mouse from the player's position
+                angle = math.atan2(mouse_y - y, mouse_x - x)
+
+                # Create a projectile
+                projectile = Projectile(x, y, angle, speed=10, damage=20)
+                self.projectiles.add(projectile)
+            self.last_ability_time = current_time
+
+    def update_abilities(self, player=None):
+        """Update all active abilities, including projectiles."""
+        for projectile in self.projectiles:
+            projectile.update(player)
 
     def draw_abilities(self, screen, camera_x, camera_y):
-        """Draw all active abilities on the screen."""
-        for ability in self.abilities:
-            screen.blit(ability.image, ability.rect.move(-camera_x, -camera_y))
+        """Draw all projectiles on the screen."""
+        for projectile in self.projectiles:
+            screen.blit(projectile.image, projectile.rect.move(-camera_x, -camera_y))

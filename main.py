@@ -3,10 +3,12 @@ import pygame
 import pytmx
 import time
 from pytmx.util_pygame import load_pygame
+
+from npc import NPCManager
 from player import Player
 from abilities import AbilitySystem
 from utils import get_spawn_position
-from stats import StaminaBar, SelectedAbilityDisplay, HealthBar
+from stats import StaminaBar, SelectedAbilityDisplay, HealthBar, TimerDisplay
 import map
 
 pygame.init()
@@ -23,7 +25,7 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 map_file = "mapa.tmx"
 tmx_data = load_pygame(map_file)
 map_width, map_height = tmx_data.width * tmx_data.tilewidth, tmx_data.height * tmx_data.tileheight
-spawn_x, spawn_y = get_spawn_position(tmx_data, 1) or (1000, 1000)
+spawn_x, spawn_y = get_spawn_position(tmx_data) or (1000, 1000)
 player = Player(player_size, player_size, "Assets/Player", spawn_x - 10, spawn_y - player_size / 2)
 
 # UI elements
@@ -36,14 +38,18 @@ selected_ability_display = SelectedAbilityDisplay(ability_system)
 camera = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 camera.center = player.rect.center
 
+time_limit = 10  # Časový limit v sekundách
 clock = pygame.time.Clock()
 running = True
 start_time = time.time()
+timer_display = TimerDisplay(time_limit)  # Nastavte limit času (v sekundách)
+font = pygame.font.SysFont(None, 36)  # Font pre zobrazenie časovača
 
-# Initialize the Map instance (not overwrite the map module)
-map_instance = map.Map(tmx_data)
-time_limit = 10  # Časový limit v sekundách
-start_timer = None
+# Initialize the Map
+mapa = map.Map(tmx_data, time_limit)
+
+npc_manager = NPCManager(tmx_data, 0, 50)
+spawn_npcs = False
 
 def update_camera():
     """Update camera position to center on player."""
@@ -68,25 +74,51 @@ while running:
     stamina_bar.update()
     ability_system.update_abilities()
 
-    if keys[pygame.K_q]: ability_system.cycle_ability("prev")
-    if keys[pygame.K_e]: ability_system.cycle_ability("next")
-    if keys[pygame.K_SPACE]: ability_system.trigger_ability(player.rect.centerx, player.rect.centery, player.facing_direction)
+    # Handle mouse events for shooting the projectile
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    if pygame.mouse.get_pressed()[0]:  # Left mouse button
+        # Trigger the ability (shoot a projectile)
+        ability_system.trigger_ability(player.rect.centerx, player.rect.centery, player.facing_direction, camera.x, camera.y)
+
+    # Update projectiles and check for collisions with NPCs
+    ability_system.update_abilities()
+    for projectile in ability_system.projectiles:
+        projectile.check_collision_with_npcs(npc_manager.npcs)
+
+    # Draw projectiles
+    ability_system.draw_abilities(screen, camera.x, camera.y)
+
+    npc_spawned_once = False
 
     if keys[pygame.K_f]:
-        if map_instance.is_near_control_panel(player.rect) and not map_instance.controll_panel_on:
-            map_instance.turn_on_buttons()
-            map_instance.controll_panel_on = True
-            map_instance.start_timer = time.time()
-        elif map_instance.is_near_button(player.rect):
-            map_instance.turn_off_button(player.rect)
+        if mapa.is_near_control_panel(player.rect) and not mapa.controll_panel_on:
+            mapa.turn_on_buttons()
+            mapa.controll_panel_on = True
+            mapa.start_timer = time.time()
+            timer_display.start()
+            if not npc_spawned_once:  # Spawn NPC iba raz
+                spawn_npcs = True
+                npc_spawned_once = True
 
-    if map_instance.controll_panel_on:
-        map_instance.reset_control_panel()
+        elif mapa.is_near_button(player.rect):
+            mapa.turn_off_button(player.rect)
+
+    if mapa.despawn_npcs:
+        spawn_npcs = False
+        npc_spawned_once = False
+        npc_manager.despawn_all_npcs()
+
+
 
     # Update camera and render everything
     update_camera()
-    map_instance.render_map_tiles(screen, tmx_data, camera, start_time)
-    map_instance.render_map_objects(screen, tmx_data, player, camera, start_time)
+    mapa.render_map_tiles(screen, tmx_data, camera, start_time)
+    mapa.render_map_objects(screen, tmx_data, player, camera, start_time)
+
+    # V časti, kde spracovávate NPC
+    if spawn_npcs:
+        npc_manager.update(player, camera)
+        npc_manager.draw(screen, camera)
 
     # Player collision detection
     player.check_collision_with_objects(player.rect, tmx_data)
@@ -95,6 +127,7 @@ while running:
     stamina_bar.draw(screen, 20, 20, 200, 20)
     health_bar.draw(screen, 20, 50, 200, 20)
     selected_ability_display.draw(screen, 20, 50)
+    timer_display.draw(screen, font, 10, 100)
     ability_system.draw_abilities(screen, camera.x, camera.y)
 
     pygame.display.flip()

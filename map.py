@@ -3,13 +3,15 @@ import time
 import pytmx
 import pygame
 
+
 class Map:
-    def __init__(self, tmx_data):
+    def __init__(self, tmx_data, time_limit):
         self.tmx_data = tmx_data
         self.controll_panel_on = False
         self.btn_off_count = 0
-        self.time_limit = 10  # Časový limit v sekundách
         self.start_timer = None
+        self.time_limit = time_limit
+        self.despawn_npcs = False
 
     def get_animated_gid(self, tmx_data, gid, elapsed_time):
         """Return the GID for animated tiles based on elapsed time."""
@@ -97,6 +99,12 @@ class Map:
                                     obj.properties['button'] = 0
                                     self.btn_off_count += 1
                                     self.update_control_panel_animation()
+                                    if self.btn_off_count >= 3:
+                                        self.activate_teleport(self.tmx_data)
+                                        self.btn_off_count = 0
+                                        self.controllPanelOn = False
+                                        self.start_timer = None  # Reset časovačas
+                                        self.despawn_npcs = True
 
     def update_control_panel_animation(self):
         for layer in self.tmx_data.layers:
@@ -114,7 +122,7 @@ class Map:
         """Check if the player is near an object with 'controllPanel = 1' in the 'Structures' layer."""
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup):
-                if layer.name == "Structures":  # Ensure we are checking the Structures layer
+                if layer.name == "Structures":
                     for obj in layer:
                         if hasattr(obj, 'properties') and 'controllPanel' in obj.properties and obj.properties['controllPanel'] == 0:
                             obj_rect = pygame.Rect(obj.x, obj.y, obj.width, obj.height)
@@ -126,7 +134,7 @@ class Map:
         """Check if the player is near a button in the 'Structures' layer."""
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup):
-                if layer.name == "Structures":  # Ensure we are checking the Structures layer
+                if layer.name == "Structures":
                     for obj in layer:
                         if hasattr(obj, 'properties') and 'button' in obj.properties:
                             obj_rect = pygame.Rect(obj.x, obj.y, obj.width, obj.height)
@@ -158,3 +166,16 @@ class Map:
                 self.btn_off_count = 0
                 self.controll_panel_on = False
                 self.start_timer = None
+
+    def activate_teleport(self, tmx_data):
+        for layer in tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer):
+                for x, y, gid in layer:
+                    if gid != 0:
+                        tile_properties = tmx_data.get_tile_properties_by_gid(gid)
+                        if tile_properties and 'frames' in tile_properties and 'teleport' in tile_properties:
+                            animation_frames = tile_properties['frames']
+                            if len(animation_frames) > 1:
+                                new_gid = animation_frames[1][0]  # Použite správny index na získanie GID
+                                layer.data[y][x] = new_gid  # Aktualizujte iba potrebné GID
+                                tile_properties['teleport'] = 1

@@ -3,7 +3,7 @@ import pygame
 import pytmx
 
 from sprite import Sprite
-from utils import get_tile_under_player, get_tile_properties
+from utils import get_tile_under_player, get_walk_tile_properties, get_structure_tile_properties
 
 
 class Player(Sprite):
@@ -141,21 +141,29 @@ class Player(Sprite):
 
         # Get the tile under the bottom half of the player
         tile_x, tile_y = get_tile_under_player(new_bottom_half_rect, tmx_data)
-        tile_properties = get_tile_properties(tile_x, tile_y, tmx_data)
+        tile_walk_properties = get_walk_tile_properties(tile_x, tile_y, tmx_data)
+        tile_structure_properties = get_structure_tile_properties(tile_x, tile_y, tmx_data)
 
         # Special check for downward movement
         if direction == "Down":
             # Check the bottom tile (based on the bottom of the player's sprite)
             bottom_tile_y = (new_bottom_half_rect.bottom - 1) // tmx_data.tileheight
-            bottom_tile_properties = get_tile_properties(tile_x, bottom_tile_y, tmx_data)
+            bottom_tile_properties = get_walk_tile_properties(tile_x, bottom_tile_y, tmx_data)
             if not (bottom_tile_properties and "canWalk" in bottom_tile_properties and bottom_tile_properties[
                 "canWalk"] == 1):
                 # If the bottom tile is not walkable, prevent downward movement
                 dy = 0
 
+        if tile_structure_properties and "teleport" in tile_structure_properties and tile_structure_properties["teleport"] == 1:
+            target_x, target_y = 1000, 1000
+
+            # Teleport the player
+            self.rect.topleft = (target_x, target_y)
+            self.bottom_half_rect.topleft = (target_x, target_y + self.rect.height // 2)
+            return
+
         # Check if there's a collision with any objects at the new position
-        if tile_properties and "canWalk" in tile_properties and tile_properties[
-            "canWalk"] == 1 and not self.check_collision_with_objects(new_bottom_half_rect, tmx_data):
+        if tile_walk_properties and "canWalk" in tile_walk_properties and tile_walk_properties["canWalk"] == 1 and not self.check_collision_with_objects(new_bottom_half_rect, tmx_data):
             self.move(dx * speed, dy * speed)
 
         # Update the animation based on the current direction
