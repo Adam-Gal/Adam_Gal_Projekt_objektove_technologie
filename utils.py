@@ -15,11 +15,13 @@ def get_tile_under_player(player_rect, tmx_data):
 def get_walk_tile_properties(tile_x, tile_y, tmx_data):
     """Get the properties of the tile under the player."""
     tile_layer = tmx_data.get_layer_by_name("Ground")
-    gid = tile_layer.data[tile_y][tile_x]
-    if gid != 0:
-        tile_properties = tmx_data.get_tile_properties_by_gid(gid)
-        return tile_properties
+    if 0 <= tile_x < tile_layer.width and 0 <= tile_y < tile_layer.height:
+        gid = tile_layer.data[tile_y][tile_x]
+        if gid != 0:
+            tile_properties = tmx_data.get_tile_properties_by_gid(gid)
+            return tile_properties
     return None
+
 
 def get_structure_tile_properties(tile_x, tile_y, tmx_data):
     """Get the properties of the tile under the player."""

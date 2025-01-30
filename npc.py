@@ -9,7 +9,7 @@ from animation_loader import load_animations
 
 
 class NPC(pygame.sprite.Sprite):
-    def __init__(self, floating_text_group, tmx_data, width, height, asset_path, start_x=0, start_y=0, attack_cooldown=1, max_approach_distance=40, max_detection_distance=300):
+    def __init__(self, floating_text_group, tmx_data, width, height, asset_path, start_x, start_y, attack_cooldown, max_approach_distance, max_detection_distance, hp, damage):
         super().__init__()
         self.frame_count = 0
         self.asset_path = asset_path
@@ -24,6 +24,9 @@ class NPC(pygame.sprite.Sprite):
         self.animations = load_animations(asset_path, width, height)
         self.current_animation = "Idle"  # Default animation
 
+        self.heart_image = pygame.image.load("Assets/Items/heart.png")  # Obrázok srdca
+        self.heart_image = pygame.transform.scale(self.heart_image, (32, 32))
+
         # Check if animation exists and is valid
         if self.current_animation in self.animations and len(self.animations[self.current_animation]) > 0:
             self.image = self.animations[self.current_animation][0]
@@ -37,8 +40,8 @@ class NPC(pygame.sprite.Sprite):
         # Other attributes
         self.speed = 2.5
         self.attack_range = 40
-        self.health = 50
-        self.damage = 10
+        self.health = hp
+        self.damage = damage
         self.attack_cooldown = attack_cooldown
         self.last_attack_time = 0
         self.max_approach_distance = max_approach_distance
@@ -160,9 +163,10 @@ class NPC(pygame.sprite.Sprite):
                     self.update_orientation(player)
                     if self.can_move_to(direction, tmx_data):
                         self.move_toward_player(direction)
-
-            if self.check_collision_with_objects(tmx_data):
-                self.avoid_obstacles(tmx_data)
+            else:
+                if self.current_animation != "Idle":
+                    self.current_animation = "Idle"
+                    self.animation_index = 0
 
             if self.check_attack_range(player):
                 self.attack(player)
@@ -189,12 +193,13 @@ class NPC(pygame.sprite.Sprite):
 
         # Update the image to flip horizontally based on facing direction
         if self.facing_direction == "left":
-            if self.animations[self.current_animation]:  # Ensure frames exist
-                self.image = pygame.transform.flip(self.animations[self.current_animation][self.animation_index], True,
-                                                   False)
+            if self.animations[self.current_animation][self.animation_index]:  # Ensure frames exist
+                self.image = pygame.transform.flip(self.animations[self.current_animation][self.animation_index], True,False)
         elif self.facing_direction == "right":
-            if self.animations[self.current_animation]:  # Ensure frames exist
+            if self.animations[self.current_animation][self.animation_index]:  # Ensure frames exist
                 self.image = self.animations[self.current_animation][self.animation_index]
+        else:
+            self.image = self.animations[self.current_animation][self.animation_index]
 
     def get_direction_toward_player(self, player):
         """Calculate the direction toward the player."""
@@ -228,21 +233,6 @@ class NPC(pygame.sprite.Sprite):
         self.rect.x += dx
         self.rect.y += dy
 
-    def avoid_obstacles(self, tmx_data):
-        """Make the NPC avoid obstacles."""
-        self.rect.x += random.choice([-self.speed, self.speed])
-        self.rect.y += random.choice([-self.speed, self.speed])
-
-    def check_collision_with_objects(self, tmx_data):
-        """Check if NPC collides with any objects."""
-        for layer in tmx_data.layers:
-            if isinstance(layer, pytmx.TiledObjectGroup):
-                for obj in layer:
-                    obj_rect = pygame.Rect(obj.x + 10, obj.y + obj.height / 1.5, obj.width - 20, obj.height / 4)
-                    if self.rect.colliderect(obj_rect):
-                        return True
-        return False
-
     def check_attack_range(self, player):
         """Check if the NPC is within attack range of the player."""
         distance = self.rect.centerx - player.rect.centerx, self.rect.centery - player.rect.centery
@@ -267,18 +257,25 @@ class NPC(pygame.sprite.Sprite):
         self.health -= damage
         if self.health <= 0:
             self.health = 0
+            self.drop_item()
             self.kill()
 
         # Create floating text positioned above the NPC
         floating_text = FloatingText(f"-{damage}", self.rect.centerx, self.rect.centery, 0.5)
         floating_text_group.add(floating_text)
 
+    def drop_item(self):
+        """Dropne srdce so šancou 1 ku 25."""
+        if random.randint(1, 15) == 1:  # Šanca na drop
+            heart = DroppedHeart(self.rect.centerx, self.rect.centery, self.heart_image)
+            DroppedHeart.all_hearts.add(heart)
+
     def draw(self, surface, camera):
         """Draw the NPC considering the camera offset."""
         surface.blit(self.image, self.rect.move(-camera.x, -camera.y))
 
 class NPCManager:
-    def __init__(self, floating_text_group, tmx_data, spawn_interval=1, max_enemies=5, min_distance=50):
+    def __init__(self, floating_text_group, tmx_data, spawn_interval, max_enemies, min_distance, npc_assets, size, hp, damage):
         self.npcs = pygame.sprite.Group()
         self.tmx_data = tmx_data
         self.spawn_interval = spawn_interval
@@ -286,6 +283,10 @@ class NPCManager:
         self.last_spawn_time = time.time()
         self.min_distance = min_distance  # Minimum distance between NPCs
         self.floating_text_group = floating_text_group
+        self.npc_assets = npc_assets
+        self.size = size
+        self.hp = hp
+        self.damage = damage
 
     def check_minimum_distance(self, npc, other_npcs):
         """Ensure the NPC is at least `min_distance` away from all other NPCs."""
@@ -325,11 +326,13 @@ class NPCManager:
         for npc in self.npcs:
             npc.update(player, self.tmx_data, camera_x, camera_y)
 
+        DroppedHeart.all_hearts.update(player)
+
     def spawn_npc(self, player):
         """Spawn a new NPC at a random walkable position far from the player."""
         spawn_pos = self.get_random_walkable_position()
         max_aproach_distance = 40
-        max_detection_distance = 400
+        max_detection_distance = 300
         if spawn_pos:
             # Check if the spawn position is far enough from the player
             distance_to_player = pygame.math.Vector2(
@@ -338,7 +341,7 @@ class NPCManager:
             ).length()
 
             if distance_to_player > max_detection_distance + 100:
-                npc = NPC(self.floating_text_group, self.tmx_data, 50, 50, "Assets/Maps/LavaPlace/Npc/Demon", spawn_pos[0], spawn_pos[1], 1,  max_aproach_distance, max_detection_distance)
+                npc = NPC(self.floating_text_group, self.tmx_data, self.size, self.size, self.npc_assets, spawn_pos[0], spawn_pos[1], 1,  max_aproach_distance, max_detection_distance, self.hp, self.damage)
                 self.npcs.add(npc)
 
     def despawn_all_npcs(self):
@@ -346,9 +349,12 @@ class NPCManager:
         self.npcs.empty()
 
     def draw(self, surface, camera):
-        """Draw all NPCs considering the camera offset."""
+        """Vykreslí NPC a predmety."""
         for npc in self.npcs:
             npc.draw(surface, camera)
+
+        for heart in DroppedHeart.all_hearts:
+            surface.blit(heart.image, heart.rect.move(-camera.x, -camera.y))
 
 class FloatingText(pygame.sprite.Sprite):
     def __init__(self, text, x, y, duration=1, color=(255, 0, 0), outline_color=(0, 0, 0), rise_speed=30):
@@ -390,4 +396,18 @@ class FloatingText(pygame.sprite.Sprite):
         """Draw the floating text."""
         surface.blit(self.image, self.rect)
 
+class DroppedHeart(pygame.sprite.Sprite):
+    """Trieda reprezentujúca srdce, ktoré môže hráč zobrať."""
+    all_hearts = pygame.sprite.Group()  # Skupina pre všetky srdcia
+
+    def __init__(self, x, y, image):
+        super().__init__()
+        self.image = image
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player):
+        """Skontroluje, či hráč zobral srdce."""
+        if self.rect.colliderect(player.rect):
+            player.health = min(player.health + 50, player.max_health)  # Pridanie života hráčovi
+            self.kill()
 

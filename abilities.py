@@ -5,7 +5,7 @@ import math
 from animation_loader import load_animation_frames  # Import the new animation loader function
 
 class Projectile(pygame.sprite.Sprite):
-    def __init__(self, x, y, camera_x, camera_y, direction, speed, damage, animation_path, effect=None, max_distance=300, offset=15):
+    def __init__(self, x, y, camera_x, camera_y, direction, speed, damage, animation_path, effect=None, max_distance=300, offset=20):
         super().__init__()
         # Načítanie animácie pre projektil
         self.animation_frames = load_animation_frames(animation_path)  # Use the new function
@@ -143,7 +143,7 @@ class AbilitySystem:
         self.ability_cooldown = 500
         self.last_switch_time = 0
         self.switch_cooldown = 200
-        self.abilities = ["Fireball", "Iceblast", "Wind", "Earth"]
+        self.abilities = ["Fireball", "Iceblast", "Wind", "Earthspikes"]
         self.npc_group = npc_group
         self.floating_text_group = floating_text_group
 
@@ -152,7 +152,7 @@ class AbilitySystem:
             "Fireball": {"cooldown": 500, "last_use": None},
             "Iceblast": {"cooldown": 500, "last_use": None},
             "Wind": {"cooldown": 500, "last_use": None},
-            "Earth": {"cooldown": 7000, "last_use": None},  # 7-sekundový cooldown
+            "Earthspikes": {"cooldown": 7000, "last_use": None},  # 7-sekundový cooldown
         }
 
     def switch_ability_forward(self):
@@ -169,7 +169,11 @@ class AbilitySystem:
             self.selected_ability = self.abilities[(current_index - 1) % len(self.abilities)]
             self.last_switch_time = current_time
 
-    def trigger_ability(self, x, y, direction, camera_x, camera_y):
+    def select_ability_by_index(self, index):
+        if 0 <= index < len(self.abilities):
+            self.selected_ability = self.abilities[index]
+
+    def trigger_ability(self, x, y, camera_x, camera_y):
         current_time = pygame.time.get_ticks()
 
         # Over cooldown pre aktuálne vybranú schopnosť
@@ -197,7 +201,7 @@ class AbilitySystem:
                 self.projectiles.add(projectile)
 
 
-            elif self.selected_ability == "Earth":
+            elif self.selected_ability == "Earthspikes":
 
                 # Získaj pozíciu myši (už posunutú kamerou)
                 spike_x = mouse_x

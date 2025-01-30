@@ -12,6 +12,8 @@ class Map:
         self.start_timer = None
         self.time_limit = time_limit
         self.despawn_npcs = False
+        self.stopTimer = False
+
 
     def get_animated_gid(self, tmx_data, gid, elapsed_time):
         """Return the GID for animated tiles based on elapsed time."""
@@ -57,9 +59,9 @@ class Map:
                         gid = self.get_animated_gid(tmx_data, obj.gid, elapsed_time)
                         tile_image = tmx_data.get_tile_image_by_gid(gid)
                         if tile_image:
-                            (above_player if y_pos + obj.height / 2 < player.rect.centery else below_player).append((tile_image, x_pos, y_pos))
+                            (above_player if y_pos + obj.height / 2 < player.rect.centery - camera.y else below_player).append((tile_image, x_pos, y_pos))
                     else:
-                        (above_player if y_pos + obj.height / 2 < player.rect.centery else below_player).append((None, x_pos, y_pos))
+                        (above_player if y_pos + obj.height / 2 < player.rect.centery - camera.y else below_player).append((None, x_pos, y_pos))
 
         for tile_image, x_pos, y_pos in above_player:
             screen.blit(tile_image, (x_pos, y_pos)) if tile_image else pygame.draw.rect(screen, (0, 255, 0), pygame.Rect(x_pos, y_pos, 50, 50), 2)
@@ -105,6 +107,8 @@ class Map:
                                         self.controllPanelOn = False
                                         self.start_timer = None  # Reset časovačas
                                         self.despawn_npcs = True
+                                        self.stopTimer = True
+
 
     def update_control_panel_animation(self):
         for layer in self.tmx_data.layers:

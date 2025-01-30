@@ -1,183 +1,155 @@
 import os
 import pygame
 import pytmx
-
 from sprite import Sprite
 from utils import get_tile_under_player, get_walk_tile_properties, get_structure_tile_properties
 
-
 class Player(Sprite):
+    DIRECTIONS = ["Down", "Up", "Left", "Right"]
+    FRAME_DELAY = 10
+    BASE_SPEED = 2
+    SPRINT_MULTIPLIER = 1.5
+
     def __init__(self, width, height, asset_path, start_x=0, start_y=0):
         super().__init__(None, width, height)
+
         self.asset_path = asset_path
         self.animations = self.load_animations()
         self.current_animation = "Down"
         self.current_frame = 0
-        self.frame_delay = 10
         self.frame_counter = 0
         self.image = self.animations[self.current_animation][0]
 
-        self.facing_direction = "Down"
         self.rect.topleft = (start_x, start_y)
-        self.speed = 2
+        self.speed = self.BASE_SPEED
         self.is_sprinting = False
 
-        # Health attributes
+        # Health and stamina
         self.max_health = 100
         self.health = self.max_health
-
-        # Stamina attributes
         self.max_stamina = 100
         self.stamina = self.max_stamina
         self.stamina_regen_rate = 0.3
-        self.stamina_depletion_rate = 0.35
+        self.stamina_depletion_rate = 0.25
         self.stamina_recharge_needed = False
 
-        # Set up a collider for the player that only considers the bottom half
-        self.bottom_half_rect = pygame.Rect(self.rect.x, self.rect.y + self.rect.height // 2, self.rect.width, self.rect.height // 2)
+        self.teleported = False
+        self.new_map = None
 
-    def move(self, dx, dy):
-        self.rect.x += dx
-        self.rect.y += dy
-        self.bottom_half_rect.x = self.rect.x
-        self.bottom_half_rect.y = self.rect.y + self.rect.height // 2
-
+        # Bottom half collider
+        self.bottom_half_rect = pygame.Rect(
+            self.rect.x, self.rect.y + self.rect.height // 2, self.rect.width, self.rect.height // 2
+        )
 
     def load_animations(self):
         animations = {}
-        directions = ["Down", "Up", "Left", "Right"]
-        for direction in directions:
+        for direction in self.DIRECTIONS:
             path = os.path.join(self.asset_path, direction)
-            frames = [os.path.join(path, f"{i}.png") for i in range(1, 4)]
-            animations[direction] = [self.load_image(frame) for frame in frames]
+            frames = [self.load_image(os.path.join(path, f"{i}.png")) for i in range(1, 4)]
+            animations[direction] = frames
         return animations
 
     def load_image(self, image_path):
-        try:
-            image = pygame.image.load(image_path)
-            return pygame.transform.scale(image, (self.rect.width, self.rect.height))
-        except pygame.error as e:
-            raise SystemExit(f"Unable to load image {image_path}: {e}")
+        image = pygame.image.load(image_path)
+        return pygame.transform.scale(image, (self.rect.width, self.rect.height))
+
+    def move(self, dx, dy):
+        self.rect.move_ip(dx, dy)
+        self.bottom_half_rect.move_ip(dx, dy)
 
     def idle(self):
-        self.current_frame = 0  # Reset to the first frame
-        self.frame_counter = 0  # Reset frame counter
-        self.image = self.animations[self.current_animation][0]  # Set the current image to the first frame
+        self.current_frame = 0
+        self.frame_counter = 0
+        self.image = self.animations[self.current_animation][0]
 
-    def update(self, direction):
-        if direction:
-            # If the direction has changed, reset to the first frame
-            if self.current_animation != direction:
-                self.current_frame = 0
-                self.frame_counter = 0
-
-            self.facing_direction = direction
+    def update_animation(self, direction):
+        if direction and direction != self.current_animation:
             self.current_animation = direction
+            self.current_frame = 0
+            self.frame_counter = 0
 
-            # Animation frames
-            animation_frames = self.animations[direction]
-            extended_frames = [animation_frames[0], animation_frames[1], animation_frames[0], animation_frames[2]]
-
-            self.frame_counter += 1
-            if self.frame_counter >= self.frame_delay:
-                self.current_frame = (self.current_frame + 1) % len(extended_frames)
+        self.frame_counter += 1
+        if direction:
+            if self.frame_counter >= self.FRAME_DELAY:
+                frames = self.animations[self.current_animation]
+                self.current_frame = (self.current_frame + 1) % len(frames)
+                self.image = frames[self.current_frame]
                 self.frame_counter = 0
-
-            self.image = extended_frames[self.current_frame]
         else:
             self.idle()
 
     def handle_movement(self, keys, tmx_data):
-        """Handle player movement and stamina."""
-        direction = None
-        dx, dy = 0, 0
-        moving = False  # Indicator to check if the player is moving
+        direction, dx, dy = self.get_movement_direction(keys)
+        speed = self.adjust_speed_for_sprint(keys, direction)
 
-        # Base speed (adjusted for sprinting)
-        speed = self.speed
-
-        # Handle movement based on key presses
-        if keys[pygame.K_a]:
-            dx = -1
-            direction = "Left"
-            moving = True
-        if keys[pygame.K_d]:
-            dx = 1
-            direction = "Right"
-            moving = True
-        if keys[pygame.K_w]:
-            dy = -1
-            direction = "Up"
-            moving = True
-        if keys[pygame.K_s]:
-            dy = 1
-            direction = "Down"
-            moving = True
-
-        # Normalize diagonal movement to prevent faster diagonal speed
         if dx != 0 and dy != 0:
-            normalization_factor = (2 ** 0.5) / 2
-            dx *= normalization_factor
-            dy *= normalization_factor
+            dx, dy = self.normalize_diagonal_movement(dx, dy)
 
-        # Sprint logic
-        if moving and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not self.stamina_recharge_needed:
-            self.is_sprinting = True
-            speed *= 1.5  # Increase speed during sprint
-            self.stamina -= self.stamina_depletion_rate
-            self.stamina = max(0, self.stamina)
-            if self.stamina == 0:
-                self.stamina_recharge_needed = True
-        else:
-            self.is_sprinting = False
-            self.stamina += self.stamina_regen_rate
-            self.stamina = min(self.max_stamina, self.stamina)
-            if self.stamina == self.max_stamina:
-                self.stamina_recharge_needed = False
-
-        # Calculate the player's new position
-        new_rect = self.rect.move(dx * speed, dy * speed)
-        new_bottom_half_rect = self.bottom_half_rect.move(dx * speed, dy * speed)
-
-        # Get the tile under the bottom half of the player
-        tile_x, tile_y = get_tile_under_player(new_bottom_half_rect, tmx_data)
-        tile_walk_properties = get_walk_tile_properties(tile_x, tile_y, tmx_data)
-        tile_structure_properties = get_structure_tile_properties(tile_x, tile_y, tmx_data)
-
-        # Special check for downward movement
-        if direction == "Down":
-            # Check the bottom tile (based on the bottom of the player's sprite)
-            bottom_tile_y = (new_bottom_half_rect.bottom - 1) // tmx_data.tileheight
-            bottom_tile_properties = get_walk_tile_properties(tile_x, bottom_tile_y, tmx_data)
-            if not (bottom_tile_properties and "canWalk" in bottom_tile_properties and bottom_tile_properties[
-                "canWalk"] == 1):
-                # If the bottom tile is not walkable, prevent downward movement
-                dy = 0
-
-        if tile_structure_properties and "teleport" in tile_structure_properties and tile_structure_properties["teleport"] == 1:
-            target_x, target_y = 1000, 1000
-
-            # Teleport the player
-            self.rect.topleft = (target_x, target_y)
-            self.bottom_half_rect.topleft = (target_x, target_y + self.rect.height // 2)
-            return
-
-        # Check if there's a collision with any objects at the new position
-        if tile_walk_properties and "canWalk" in tile_walk_properties and tile_walk_properties["canWalk"] == 1 and not self.check_collision_with_objects(new_bottom_half_rect, tmx_data):
+        if self.can_move(dx * speed, dy * speed, tmx_data):
             self.move(dx * speed, dy * speed)
 
-        # Update the animation based on the current direction
-        self.update(direction)
+        self.update_animation(direction)
+
+    def get_movement_direction(self, keys):
+        direction, dx, dy = None, 0, 0
+        if keys[pygame.K_a]:
+            dx, direction = -1, "Left"
+        if keys[pygame.K_d]:
+            dx, direction = 1, "Right"
+        if keys[pygame.K_w]:
+            dy, direction = -1, "Up"
+        if keys[pygame.K_s]:
+            dy, direction = 1, "Down"
+        return direction, dx, dy
+
+    def adjust_speed_for_sprint(self, keys, moving):
+        if moving and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not self.stamina_recharge_needed:
+            self.is_sprinting = True
+            self.stamina = max(0, self.stamina - self.stamina_depletion_rate)
+            if self.stamina == 0:
+                self.stamina_recharge_needed = True
+            return self.speed * self.SPRINT_MULTIPLIER
+
+        self.is_sprinting = False
+        self.stamina = min(self.max_stamina, self.stamina + self.stamina_regen_rate)
+        if self.stamina == self.max_stamina:
+            self.stamina_recharge_needed = False
+        return self.speed
+
+    def normalize_diagonal_movement(self, dx, dy):
+        normalization_factor = (2 ** 0.5) / 2
+        return dx * normalization_factor, dy * normalization_factor
+
+    def can_move(self, dx, dy, tmx_data):
+        new_bottom_half_rect = self.bottom_half_rect.move(dx, dy)
+        tile_x, tile_y = get_tile_under_player(new_bottom_half_rect, tmx_data)
+
+        # Skontrolujte, či je pozícia pohybu platná a nezablokuje to pohyb
+        if not self.is_tile_walkable(tile_x, tile_y, tmx_data):
+            return False
+
+        tile_structure_properties = get_structure_tile_properties(tile_x, tile_y, tmx_data)
+        if tile_structure_properties and tile_structure_properties.get("teleport") == 1:
+            self.new_map = tile_structure_properties.get("map")
+            self.teleported = True
+            return False
+
+        return not self.check_collision_with_objects(new_bottom_half_rect, tmx_data)
+
+    def is_tile_walkable(self, tile_x, tile_y, tmx_data):
+        properties = get_walk_tile_properties(tile_x, tile_y, tmx_data)
+        return properties and properties.get("canWalk") == 1
+
+    def is_teleported(self):
+        return self.teleported
 
     def check_collision_with_objects(self, new_rect, tmx_data):
-        """Check if the player collides with an object at the new position."""
         for layer in tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup):
                 for obj in layer:
-                    obj_rect = pygame.Rect(obj.x+10, obj.y+obj.height/1.5, obj.width-20, obj.height / 4)
-
-                    # Check if the new rect would collide with any object
+                    obj_rect = pygame.Rect(
+                        obj.x + 10, obj.y + obj.height / 1.5, obj.width - 20, obj.height / 4
+                    )
                     if new_rect.colliderect(obj_rect):
                         return True
         return False
-
