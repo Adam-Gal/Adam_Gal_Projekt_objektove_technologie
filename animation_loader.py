@@ -1,4 +1,3 @@
-# animation_loader.py
 import os
 import pygame
 
@@ -29,5 +28,4 @@ def load_animation_frames(animation_path, width=None, height=None):
             # Scale the image to the specified width and height
             image = pygame.transform.scale(image, (width, height))
             frames.append(image)
-
     return frames

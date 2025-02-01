@@ -2,37 +2,42 @@ import os
 import pygame
 import pytmx
 from sprite import Sprite
-from utils import get_tile_under_player, get_walk_tile_properties, get_structure_tile_properties
+from utils import get_tile_under_player, get_walk_tile_properties, get_structure_tile_properties, get_spawn_position
 
 class Player(Sprite):
     DIRECTIONS = ["Down", "Up", "Left", "Right"]
     FRAME_DELAY = 10
     BASE_SPEED = 2
     SPRINT_MULTIPLIER = 1.5
+    FOOTSTEP_INTERVAL = 300
+    SPRINT_FOOTSTEP_INTERVAL = 150
 
-    def __init__(self, width, height, asset_path, start_x=0, start_y=0):
-        super().__init__(None, width, height)
-
+    def __init__(self, size, asset_path, spawn_x, spawn_y):
+        super().__init__(None, size, size)
         self.asset_path = asset_path
         self.animations = self.load_animations()
         self.current_animation = "Down"
         self.current_frame = 0
         self.frame_counter = 0
         self.image = self.animations[self.current_animation][0]
-
-        self.rect.topleft = (start_x, start_y)
+        self.is_dead = False
+        self.rect.topleft = (spawn_x, spawn_y)
         self.speed = self.BASE_SPEED
         self.is_sprinting = False
+        self.spawn_x = spawn_x
+        self.spawn_y = spawn_y
 
         # Health and stamina
         self.max_health = 100
         self.health = self.max_health
+        self.last_health = self.max_health
         self.max_stamina = 100
         self.stamina = self.max_stamina
         self.stamina_regen_rate = 0.3
         self.stamina_depletion_rate = 0.25
         self.stamina_recharge_needed = False
 
+        # Teleport parameters
         self.teleported = False
         self.new_map = None
 
@@ -40,6 +45,23 @@ class Player(Sprite):
         self.bottom_half_rect = pygame.Rect(
             self.rect.x, self.rect.y + self.rect.height // 2, self.rect.width, self.rect.height // 2
         )
+
+        # Load footstep sounds
+        self.footstep_sound = pygame.mixer.Sound("Assets/Sounds/Player/footstep.wav")
+        self.teleported_sound = pygame.mixer.Sound("Assets/Sounds/Player/teleport.mp3")
+        self.ough_sound = pygame.mixer.Sound("Assets/Sounds/Player/ough.mp3")
+        self.footstep_sound.set_volume(0.6)
+        self.teleported_sound.set_volume(0.8)
+        self.ough_sound.set_volume(0.6)
+        self.last_footstep_time = 0
+        self.footstep_index = 0
+
+    def play_footstep_sound(self):
+        now = pygame.time.get_ticks()
+        interval = self.SPRINT_FOOTSTEP_INTERVAL if self.is_sprinting else self.FOOTSTEP_INTERVAL
+        if now - self.last_footstep_time > interval:
+            self.footstep_sound.play()
+            self.last_footstep_time = now
 
     def load_animations(self):
         animations = {}
@@ -75,17 +97,25 @@ class Player(Sprite):
                 self.current_frame = (self.current_frame + 1) % len(frames)
                 self.image = frames[self.current_frame]
                 self.frame_counter = 0
+                self.play_footstep_sound()
         else:
             self.idle()
 
-    def handle_movement(self, keys, tmx_data):
+    def take_damage(self, damage):
+        self.health -= damage
+        self.ough_sound.play()
+        if self.health <= 0:
+            self.is_dead = True
+            self.health = self.last_health
+
+    def handle_movement(self, keys, tmx_data, camera_x, camera_y):
         direction, dx, dy = self.get_movement_direction(keys)
         speed = self.adjust_speed_for_sprint(keys, direction)
 
         if dx != 0 and dy != 0:
             dx, dy = self.normalize_diagonal_movement(dx, dy)
 
-        if self.can_move(dx * speed, dy * speed, tmx_data):
+        if self.can_move(dx * speed, dy * speed, tmx_data, camera_x, camera_y):
             self.move(dx * speed, dy * speed)
 
         self.update_animation(direction)
@@ -120,11 +150,10 @@ class Player(Sprite):
         normalization_factor = (2 ** 0.5) / 2
         return dx * normalization_factor, dy * normalization_factor
 
-    def can_move(self, dx, dy, tmx_data):
+    def can_move(self, dx, dy, tmx_data, camera_x, camera_y):
         new_bottom_half_rect = self.bottom_half_rect.move(dx, dy)
         tile_x, tile_y = get_tile_under_player(new_bottom_half_rect, tmx_data)
 
-        # Skontrolujte, či je pozícia pohybu platná a nezablokuje to pohyb
         if not self.is_tile_walkable(tile_x, tile_y, tmx_data):
             return False
 
@@ -132,9 +161,11 @@ class Player(Sprite):
         if tile_structure_properties and tile_structure_properties.get("teleport") == 1:
             self.new_map = tile_structure_properties.get("map")
             self.teleported = True
+            self.last_health = self.health
+            self.teleported_sound.play()
             return False
 
-        return not self.check_collision_with_objects(new_bottom_half_rect, tmx_data)
+        return not self.check_collision_with_objects(new_bottom_half_rect, tmx_data, camera_x, camera_y)
 
     def is_tile_walkable(self, tile_x, tile_y, tmx_data):
         properties = get_walk_tile_properties(tile_x, tile_y, tmx_data)
@@ -143,13 +174,15 @@ class Player(Sprite):
     def is_teleported(self):
         return self.teleported
 
-    def check_collision_with_objects(self, new_rect, tmx_data):
+    def check_collision_with_objects(self, new_rect, tmx_data, camera_x, camera_y):
         for layer in tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup):
                 for obj in layer:
-                    obj_rect = pygame.Rect(
-                        obj.x + 10, obj.y + obj.height / 1.5, obj.width - 20, obj.height / 4
-                    )
+                    # Make different collider based on object size
+                    if obj.width > obj.height:
+                        obj_rect = pygame.Rect(obj.x + 10, obj.y + obj.height / 2.2, obj.width - 20, obj.height/2)
+                    else:
+                        obj_rect = pygame.Rect(obj.x + 10, obj.y + obj.height / 2.2, obj.width - 20, obj.height / 2)
                     if new_rect.colliderect(obj_rect):
                         return True
         return False

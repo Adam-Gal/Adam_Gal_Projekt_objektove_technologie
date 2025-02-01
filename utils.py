@@ -2,7 +2,7 @@
 import pytmx
 
 def get_tile_under_player(player_rect, tmx_data):
-    """Get the tile position under the player."""
+    # Get the tile position under the player
     tile_width = tmx_data.tilewidth
     tile_height = tmx_data.tileheight
 
@@ -13,7 +13,7 @@ def get_tile_under_player(player_rect, tmx_data):
     return tile_x, tile_y
 
 def get_walk_tile_properties(tile_x, tile_y, tmx_data):
-    """Get the properties of the tile under the player."""
+    # Get the properties of the tile under the player
     tile_layer = tmx_data.get_layer_by_name("Ground")
     if 0 <= tile_x < tile_layer.width and 0 <= tile_y < tile_layer.height:
         gid = tile_layer.data[tile_y][tile_x]
@@ -24,7 +24,7 @@ def get_walk_tile_properties(tile_x, tile_y, tmx_data):
 
 
 def get_structure_tile_properties(tile_x, tile_y, tmx_data):
-    """Get the properties of the tile under the player."""
+    # Get the properties of the tile under the player
     tile_layer = tmx_data.get_layer_by_name("BackgroundStructures")
     gid = tile_layer.data[tile_y][tile_x]
     if gid != 0:
@@ -33,7 +33,7 @@ def get_structure_tile_properties(tile_x, tile_y, tmx_data):
     return None
 
 def get_spawn_position(tmx_data):
-    """Nájde pozíciu dlaždice s vlastnosťou `spawn` a danou hodnotou."""
+    # Find position of tile with property spawn
     for layer in tmx_data.visible_layers:
         if isinstance(layer, pytmx.TiledTileLayer):
             for x, y, gid in layer:
@@ -43,7 +43,7 @@ def get_spawn_position(tmx_data):
                         tile_width = tmx_data.tilewidth
                         tile_height = tmx_data.tileheight
                         return x * tile_width, y * tile_height
-    return None  # Ak sa nenašla žiadna dlaždica
+    return None
 
 
 

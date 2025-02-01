@@ -1,4 +1,3 @@
-# map.py
 import time
 import pytmx
 import pygame
@@ -14,9 +13,15 @@ class Map:
         self.despawn_npcs = False
         self.stopTimer = False
 
+        # Load sound effects
+        self.interaction_click_sound = pygame.mixer.Sound("Assets/Sounds/Controll_panel/interaction_click.mp3")
+        self.portal_open_sound = pygame.mixer.Sound("Assets/Sounds/Controll_panel/portal_open.mp3")
+        self.interaction_click_sound.set_volume(0.4)
+        self.portal_open_sound.set_volume(0.8)
+
 
     def get_animated_gid(self, tmx_data, gid, elapsed_time):
-        """Return the GID for animated tiles based on elapsed time."""
+        # Return the GID for animated tiles based on elapsed time
         tile_properties = tmx_data.get_tile_properties_by_gid(gid)
         if tile_properties and "frames" in tile_properties:
             animation_frames = tile_properties["frames"]
@@ -31,7 +36,7 @@ class Map:
         return gid
 
     def render_map_tiles(self, screen, tmx_data, camera, start_time):
-        """Render map tiles based on camera position."""
+        # Render map tiles based on camera position
         tile_width, tile_height = tmx_data.tilewidth, tmx_data.tileheight
         start_x, end_x = max(0, camera.left // tile_width), min(tmx_data.width, (camera.right // tile_width) + 1)
         start_y, end_y = max(0, camera.top // tile_height), min(tmx_data.height, (camera.bottom // tile_height) + 1)
@@ -47,7 +52,7 @@ class Map:
                             screen.blit(tile_image, (x * tile_width - camera.x, y * tile_height - camera.y))
 
     def render_map_objects(self, screen, tmx_data, player, camera, start_time):
-        """Render map objects above and below the player."""
+        # Render map objects above and below the player
         elapsed_time = (time.time() - start_time) * 1000
         above_player, below_player = [], []
 
@@ -70,6 +75,10 @@ class Map:
             screen.blit(tile_image, (x_pos, y_pos)) if tile_image else pygame.draw.rect(screen, (0, 255, 0), pygame.Rect(x_pos, y_pos, 50, 50), 2)
 
     def turn_on_buttons(self):
+        # Activate buttons, change animations, and start fight music
+        pygame.mixer.music.load("Assets/Sounds/Music/fight_music.mp3")
+        pygame.mixer.music.play(-1)
+        pygame.mixer.music.set_volume(0.2)
         elapsed_time = (time.time() - time.time()) * 1000
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup) and layer.name == "Structures":
@@ -83,8 +92,10 @@ class Map:
                             next_frame_gid = animation_frames[1][0]
                             obj.gid = next_frame_gid
                             obj.properties['button'] = 1
+        self.interaction_click_sound.play()
 
     def turn_off_button(self, player_rect):
+        # Turn off button which ist close enough to player
         elapsed_time = (time.time() - time.time()) * 1000
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup) and layer.name == "Structures":
@@ -101,7 +112,12 @@ class Map:
                                     obj.properties['button'] = 0
                                     self.btn_off_count += 1
                                     self.update_control_panel_animation()
+                                    self.interaction_click_sound.play()
                                     if self.btn_off_count >= 3:
+                                        self.portal_open_sound.play()
+                                        pygame.mixer.music.load("Assets/Sounds/Music/background_music.mp3")
+                                        pygame.mixer.music.set_volume(0.1)
+                                        pygame.mixer.music.play(-1)
                                         self.activate_teleport(self.tmx_data)
                                         self.btn_off_count = 0
                                         self.controllPanelOn = False
@@ -109,8 +125,8 @@ class Map:
                                         self.despawn_npcs = True
                                         self.stopTimer = True
 
-
     def update_control_panel_animation(self):
+        # Change control panel animation based on how many buttons are pressed
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup) and layer.name == "Structures":
                 for obj in layer:
@@ -123,7 +139,7 @@ class Map:
                             obj.gid = next_frame_gid
 
     def is_near_control_panel(self, player_rect):
-        """Check if the player is near an object with 'controllPanel = 1' in the 'Structures' layer."""
+        # Check if the player is near an object with 'controllPanel = 1' in the 'Structures' layer
         for layer in self.tmx_data.layers:
             if isinstance(layer, pytmx.TiledObjectGroup):
                 if layer.name == "Structures":
@@ -146,11 +162,11 @@ class Map:
                                 return True
         return False
 
-    def reset_control_panel(self):
-        """Reset the control panel and buttons after the time limit."""
+    def reset_control_panel(self, player):
+        # Reset the control panel and buttons after the time limit
         if self.controll_panel_on and self.start_timer is not None:
             elapsed_time = time.time() - self.start_timer
-            if elapsed_time > self.time_limit:
+            if elapsed_time > self.time_limit or player.is_dead:
                 for layer in self.tmx_data.layers:
                     if isinstance(layer, pytmx.TiledObjectGroup) and layer.name == "Structures":
                         for obj in layer:
@@ -170,8 +186,13 @@ class Map:
                 self.btn_off_count = 0
                 self.controll_panel_on = False
                 self.start_timer = None
+                pygame.mixer.music.load("Assets/Sounds/Music/background_music.mp3")
+                pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_volume(0.1)
+                self.interaction_click_sound.play()
 
     def activate_teleport(self, tmx_data):
+        # Activate the teleporter after all button are pressed before time limit
         for layer in tmx_data.visible_layers:
             if isinstance(layer, pytmx.TiledTileLayer):
                 for x, y, gid in layer:
