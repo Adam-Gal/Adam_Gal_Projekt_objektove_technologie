@@ -16,8 +16,11 @@ def intro_screen():
 
     while intro:
         screen.fill((0, 0, 0))
-        title_text = TITLE_FONT.render("Moja Hra", True, (255, 255, 255))
+        title_text = TITLE_FONT.render("Teleported to the NIGHTMARE", True, (255, 255, 255))
         screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, SCREEN_HEIGHT // 3))
+
+        title_text = TITLE_FONT.render("Vytvoril Adam Gál", True, (255, 255, 255))
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, SCREEN_HEIGHT - title_text.get_height() - 20))
 
         pygame.draw.rect(screen, (50, 50, 50), start_button, border_radius=10)
         pygame.draw.rect(screen, (50, 50, 50), quit_button, border_radius=10)
@@ -95,6 +98,9 @@ def game_over_screen():
         screen.fill((0, 0, 0))
         game_over_text = TITLE_FONT.render("Koniec hry!", True, (255, 0, 0))
         screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2, SCREEN_HEIGHT // 3))
+
+        game_over_text = TITLE_FONT.render("Vytvoril Adam Gál", True, (255, 255, 255))
+        screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2, SCREEN_HEIGHT - game_over_text.get_height() - 20))
 
         pygame.draw.rect(screen, (50, 50, 50), quit_button, border_radius=10)
         pygame.draw.rect(screen, (255, 255, 255), quit_button, 3, border_radius=10)
